@@ -7,6 +7,13 @@ import warnings
 # Sizes available here:
 # https://huggingface.co/openai/whisper-base
 MODEL_TO_USE = "openai/whisper-small.en"
+DEVICE = "cpu"
+if torch.cuda.is_available():
+  DEVICE = "cuda:0"
+# MPS (Apple Silicon) is only available in PyTorch 1.12+
+if getattr(torch.backends, "mps", None):
+  if torch.backends.mps.is_available():
+    DEVICE = "mps"
 
 warnings.filterwarnings("ignore")
 
