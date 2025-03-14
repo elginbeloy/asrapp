@@ -19,7 +19,7 @@ CHUNK_DURATION_SECONDS = 2
 SAMPLE_RATE = 16000
 CHUNK_FRAMES = CHUNK_DURATION_SECONDS * SAMPLE_RATE
 CHUNKS_PER_REFINEMENT = 8
-SILENT_CHUNKS_TO_FORGET = 3
+SEGMENT_SILENT_CHUNKS = 2
 VAD_THRESHOLD = 0.5
 # https://huggingface.co/openai/whisper-base
 MODEL_TO_USE = "openai/whisper-small.en"
@@ -54,7 +54,18 @@ def audio_callback(indata, frames, time, status):
     audio_queue.put(indata.copy())
 
 
-def print_transcripts(full_transcript, segment_transcript, partial_transcript):
+def get_audio_text(audio_data, asr_pipeline):
+    return asr_pipeline({
+        "array": audio_data,
+        "sampling_rate": SAMPLE_RATE,
+    })["text"]
+
+
+def print_transcripts(
+    full_transcript,
+    segment_transcript,
+    partial_transcript
+):
     os.system("clear")
     print(colored(full_transcript, "white", attrs=["bold"]), end=" ")
     print(colored(segment_transcript, "blue"))
@@ -114,38 +125,48 @@ def main():
                             all_audio_data = np.concatenate(
                               segment_buffer, axis=0).squeeze()
                             partial_transcript = ""
-                            segment_transcript = asr_pipeline({
-                              "array": all_audio_data,
-                              "sampling_rate": SAMPLE_RATE,
-                            })["text"]
+                            segment_transcript = get_audio_text(
+                                all_audio_data,
+                                asr_pipeline
+                            )
                         else:
-                            partial_transcript += asr_pipeline({
-                              "array": chunk_data,
-                              "sampling_rate": SAMPLE_RATE
-                            })["text"]
-                        print_transcripts(full_transcript, segment_transcript, partial_transcript)
+                            partial_transcript += get_audio_text(
+                                chunk_data,
+                                asr_pipeline
+                            )
+                        print_transcripts(
+                            full_transcript,
+                            segment_transcript,
+                            partial_transcript
+                        )
                     else:
                         consecutive_silent_chunks += 1
-                        if consecutive_silent_chunks >= SILENT_CHUNKS_TO_FORGET:
-                            # After long silence break out segment so we dont re-refine
+                        if consecutive_silent_chunks >= SEGMENT_SILENT_CHUNKS:
+                            # After long silence break out segment we dont re-refine
                             consecutive_silent_chunks = 0
-                            if len(segment_transcript) > 1 or len(partial_transcript) > 1:
+                            if (len(segment_transcript) > 1 or \
+                                len(partial_transcript) > 1):
                                 full_transcript += " " + segment_transcript
                                 full_transcript += " " + partial_transcript
                             segment_buffer = []
                             segment_transcript  = ""
                             partial_transcript = ""
-                            print_transcripts(full_transcript, segment_transcript, partial_transcript)
-                            print("(new segment cuz of long silence)")
+                            print_transcripts(
+                                full_transcript,
+                                segment_transcript,
+                                partial_transcript
+                            )
 
         except KeyboardInterrupt:
             print("\nStopped by user.")
             # Final transcript from the entire audio
             # TODO: Does this really help compared to just last segment?
             if len(master_buffer) > 0:
-                all_audio_data = np.concatenate(master_buffer, axis=0).squeeze()
-                refined_result = asr_pipeline({"array": all_audio_data, "sampling_rate": SAMPLE_RATE})
-                full_transcript = refined_result["text"]
+                all_audio_data = np.concatenate(
+                    master_buffer,
+                    axis=0
+                 ).squeeze()
+                full_transcript = get_audio_text(all_audio_data, asr_pipeline)
             pass
 
     # Write final transcript to file
