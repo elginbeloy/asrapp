@@ -120,6 +120,7 @@ def main():
                     if is_speech_chunk(chunk_data):
                         chunk_count += 1
                         consecutive_silent_chunks = 0
+                        # Refine segment transcript using segment audio
                         if chunk_count > CHUNKS_PER_REFINEMENT:
                             chunk_count = 0
                             all_audio_data = np.concatenate(
@@ -129,6 +130,7 @@ def main():
                                 all_audio_data,
                                 asr_pipeline
                             )
+                        # Transcribe last chunk into partial_transcript
                         else:
                             partial_transcript += get_audio_text(
                                 chunk_data,
@@ -142,7 +144,8 @@ def main():
                     else:
                         consecutive_silent_chunks += 1
                         if consecutive_silent_chunks >= SEGMENT_SILENT_CHUNKS:
-                            # After long silence break out segment we dont re-refine
+                            # After long silence break out a segment
+                            # into full_transcript which we dont re-refine
                             consecutive_silent_chunks = 0
                             chunk_count = 0
                             if (len(segment_transcript) > 1 or \
@@ -160,8 +163,8 @@ def main():
 
         except KeyboardInterrupt:
             print("\nStopped by user.")
-            # Final transcript from the entire audio
-            # TODO: Does this really help compared to just last segment?
+            # Get a final transcript from the entire audio buffer
+            # TODO: Does this help compared to only the last segment
             if len(master_buffer) > 0:
                 all_audio_data = np.concatenate(
                     master_buffer,
