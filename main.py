@@ -3,22 +3,32 @@ import sounddevice as sd
 import queue
 import numpy as np
 import warnings
+from termcolor import colored
+import torch
 
-# Sizes available here:
-# https://huggingface.co/openai/whisper-base
-MODEL_TO_USE = "openai/whisper-small.en"
-DEVICE = "cpu"
-if torch.cuda.is_available():
-  DEVICE = "cuda:0"
-# MPS (Apple Silicon) is only available in PyTorch 1.12+
-if getattr(torch.backends, "mps", None):
-  if torch.backends.mps.is_available():
-    DEVICE = "mps"
-
+# Hide warnings
 warnings.filterwarnings("ignore")
 
 from transformers import pipeline, logging
 logging.set_verbosity_error()
+
+# Parameters
+chunk_duration_seconds   = 2
+sample_rate        = 16000
+chunk_frames       = chunk_duration_seconds * sample_rate
+CHUNKS_PER_REFINEMENT = 4
+
+# Sizes available here:
+# https://huggingface.co/openai/whisper-base
+MODEL_TO_USE = "openai/whisper-small.en"
+
+DEVICE_TO_USE = "cpu"
+if torch.cuda.is_available():
+  DEVICE_TO_USE = "cuda:0"
+# MPS (Apple Silicon) is only available in PyTorch 1.12+
+if getattr(torch.backends, "mps", None):
+  if torch.backends.mps.is_available():
+    DEVICE_TO_USE = "mps"
 
 audio_queue = queue.Queue()
 
@@ -32,16 +42,9 @@ def main():
     asr_pipeline = pipeline(
         "automatic-speech-recognition",
         model=MODEL_TO_USE,
-        device="cuda:0"  # "cpu" if no GPU
+        device=DEVICE_TO_USE
     )
     print("Pipeline loaded.\n")
-
-    # Parameters
-    chunk_duration_seconds   = 3
-    sample_rate        = 16000
-    chunk_frames       = chunk_duration_seconds * sample_rate
-    # Number of chunks before processing entire to refine
-    CHUNKS_PER_REFINEMENT = 6
 
     # Buffer variables
     partial_buffer     = []
@@ -75,11 +78,11 @@ def main():
 
                     # Partial ASR for quick feedback
                     partial_result = asr_pipeline({"array": chunk_data, "sampling_rate": sample_rate})
-                    partial_transcript = partial_result["text"]
-                    full_transcript += " " + partial_transcript
+                    partial_transcript += partial_result["text"]
                     chunk_count += 1
                     os.system("clear")
-                    print(full_transcript)
+                    print(full_transcript, end=" ")
+                    print(colored(partial_transcript, "blue"))
 
                     # Every N chunks, refine by reprocessing the entire audio
                     if chunk_count >= CHUNKS_PER_REFINEMENT:
@@ -94,6 +97,7 @@ def main():
                         )
                         refined_transcript = refined_result["text"]
                         full_transcript = refined_transcript
+                        partial_transcript = ""
 
                         os.system("clear")
                         print(full_transcript)

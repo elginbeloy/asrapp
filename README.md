@@ -12,4 +12,5 @@ numpy
 sounddevice
 transformers
 torch
+termcolor
 ```
