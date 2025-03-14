@@ -144,6 +144,7 @@ def main():
                         if consecutive_silent_chunks >= SEGMENT_SILENT_CHUNKS:
                             # After long silence break out segment we dont re-refine
                             consecutive_silent_chunks = 0
+                            chunk_count = 0
                             if (len(segment_transcript) > 1 or \
                                 len(partial_transcript) > 1):
                                 full_transcript += " " + segment_transcript
@@ -165,7 +166,7 @@ def main():
                 all_audio_data = np.concatenate(
                     master_buffer,
                     axis=0
-                 ).squeeze()
+                ).squeeze()
                 full_transcript = get_audio_text(all_audio_data, asr_pipeline)
             pass
 
