@@ -56,12 +56,13 @@ def audio_callback(indata, frames, time, status):
 
 def print_transcripts(full_transcript, segment_transcript, partial_transcript):
     os.system("clear")
-    print(full_transcript, end=" ")
+    print(colored(full_transcript, "white", attrs=["bold"]), end=" ")
     print(colored(segment_transcript, "blue"))
     print(colored(partial_transcript, "yellow"))
 
 
 def main():
+    # Load the model
     print("Loading Whisper pipeline...")
     asr_pipeline = pipeline(
         "automatic-speech-recognition",
@@ -128,10 +129,9 @@ def main():
                         if consecutive_silent_chunks >= SILENT_CHUNKS_TO_FORGET:
                             # After long silence break out segment so we dont re-refine
                             consecutive_silent_chunks = 0
-                            if len(segment_transcript) > 1:
-                              # partial transcript may still have some not put into segment 
-                              # since we only refine every N chunks
-                              full_transcript += " " + segment_transcript + partial_transcript
+                            if len(segment_transcript) > 1 or len(partial_transcript) > 1:
+                                full_transcript += " " + segment_transcript
+                                full_transcript += " " + partial_transcript
                             segment_buffer = []
                             segment_transcript  = ""
                             partial_transcript = ""
@@ -141,7 +141,7 @@ def main():
         except KeyboardInterrupt:
             print("\nStopped by user.")
             # Final transcript from the entire audio
-            # TODO: Does this really help compared to just last active chunks?
+            # TODO: Does this really help compared to just last segment?
             if len(master_buffer) > 0:
                 all_audio_data = np.concatenate(master_buffer, axis=0).squeeze()
                 refined_result = asr_pipeline({"array": all_audio_data, "sampling_rate": SAMPLE_RATE})
