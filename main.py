@@ -68,7 +68,7 @@ def print_transcripts(
 ):
     os.system("clear")
     print(colored(full_transcript, "white", attrs=["bold"]), end=" ")
-    print(colored(segment_transcript, "blue"))
+    print(colored(segment_transcript, "blue"), end=" ")
     print(colored(partial_transcript, "yellow"))
 
 

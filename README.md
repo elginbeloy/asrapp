@@ -4,6 +4,7 @@ App for local automatic speech recognition.
 
 Good for transcribing meeting notes.
 
+
 # Setup
 
 The app requires the following libraries:
@@ -13,4 +14,8 @@ sounddevice
 transformers
 torch
 termcolor
+silero_vad
 ```
+
+# TODOs
+[ ] Add verbose stats to see RAM/CPU usage
