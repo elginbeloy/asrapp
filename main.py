@@ -83,7 +83,7 @@ def print_data(
     master_byte_str = get_byte_str(master_buffer_size)
     segment_byte_str = get_byte_str(segment_buffer_size)
     print("\nBuffer Sizes:", end="  ")
-    print(colored(f"{master_byte_str} master", "white", attrs=["bold"]), end=" | ")
+    print(colored(f"{master_byte_str} master", "green"), end=" | ")
     print(colored(f"{segment_byte_str} segment", "blue"))
 
 
