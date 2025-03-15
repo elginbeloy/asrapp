@@ -7,6 +7,8 @@ import torch
 from termcolor import colored
 from silero_vad import load_silero_vad, get_speech_timestamps
 from transformers import pipeline, logging
+from argparse import ArgumentParser
+from sys import getsizeof
 
 
 # Hide warnings
@@ -61,6 +63,30 @@ def get_audio_text(audio_data, asr_pipeline):
     })["text"]
 
 
+def get_byte_str(bytes):
+  if bytes > 1000000000:
+      bytes = round(bytes / 100000000)/10
+      return f"{bytes}GB"
+  elif bytes > 1000000:
+      bytes = round(bytes / 100000)/10
+      return f"{bytes}MB"
+  elif bytes > 1000:
+      bytes = round(bytes / 100)/10
+      return f"{bytes}KB"
+  else:
+      return f"{bytes}B"
+
+def print_data(
+    master_buffer_size,
+    segment_buffer_size,
+):
+    master_byte_str = get_byte_str(master_buffer_size)
+    segment_byte_str = get_byte_str(segment_buffer_size)
+    print("\nBuffer Sizes:", end="  ")
+    print(colored(f"{master_byte_str} master", "white", attrs=["bold"]), end=" | ")
+    print(colored(f"{segment_byte_str} segment", "blue"))
+
+
 def print_transcripts(
     full_transcript,
     segment_transcript,
@@ -72,7 +98,7 @@ def print_transcripts(
     print(colored(partial_transcript, "yellow"))
 
 
-def main():
+def main(verbose=False):
     # Load the model
     print("Loading Whisper pipeline...")
     asr_pipeline = pipeline(
@@ -141,6 +167,11 @@ def main():
                             segment_transcript,
                             partial_transcript
                         )
+                        if verbose:
+                            print_data(
+                                getsizeof(master_buffer),
+                                getsizeof(segment_buffer)
+                            )
                     else:
                         consecutive_silent_chunks += 1
                         if consecutive_silent_chunks >= SEGMENT_SILENT_CHUNKS:
@@ -160,6 +191,11 @@ def main():
                                 segment_transcript,
                                 partial_transcript
                             )
+                            if verbose:
+                                print_data(
+                                    getsizeof(master_buffer),
+                                    getsizeof(segment_buffer)
+                                )
 
         except KeyboardInterrupt:
             print("\nStopped by user.")
@@ -180,4 +216,7 @@ def main():
 
 
 if __name__ == "__main__":
-  main()
+  parser = ArgumentParser()
+  parser.add_argument("-v", "--verbose", action="store_true")
+  args = parser.parse_args()
+  main(verbose=args.verbose)
