@@ -16,6 +16,3 @@ torch
 termcolor
 silero_vad
 ```
-
-# TODOs
-[ ] Add verbose stats to see RAM/CPU usage
