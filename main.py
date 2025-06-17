@@ -8,8 +8,10 @@ from termcolor import colored
 from silero_vad import load_silero_vad, get_speech_timestamps
 from transformers import pipeline, logging
 from argparse import ArgumentParser
-from sys import getsizeof
-
+from sys import stdin, getsizeof
+import tty
+import termios
+from select import select
 
 # Hide warnings
 warnings.filterwarnings("ignore")
@@ -128,77 +130,62 @@ def record(verbose=False, cutoff_on_silence=False):
         callback=audio_callback
     ):
         print(colored("Recording!", "green", attrs=["bold"]))
-        print("Press Ctrl+C to stop.")
-        while True:
-            block = audio_queue.get()
-            partial_buffer.append(block)
-            segment_buffer.append(block)
-            master_buffer.append(block)
-            frames_collected += block.shape[0]
+        print("Press R to stop.")
 
-            # Process chunk once we get enough frames
-            if frames_collected >= CHUNK_FRAMES:
-                frames_collected = 0
-                chunk_data = np.concatenate(
-                  partial_buffer, axis=0).squeeze()
-                partial_buffer = []
+        # File descriptor for stdin
+        fd = stdin.fileno()
+        # Save the original terminal settings
+        old_settings = termios.tcgetattr(fd)
 
-                if is_speech_chunk(chunk_data):
-                    chunk_count += 1
-                    consecutive_silent_chunks = 0
-                    # Refine segment transcript using segment audio
-                    if chunk_count > CHUNKS_PER_REFINEMENT:
-                        chunk_count = 0
-                        all_audio_data = np.concatenate(
-                          segment_buffer, axis=0).squeeze()
-                        partial_transcript = ""
-                        segment_transcript = get_audio_text(
-                            all_audio_data,
-                            asr_pipeline
-                        )
-                    # Transcribe last chunk into partial_transcript
-                    else:
-                        partial_transcript += get_audio_text(
-                            chunk_data,
-                            asr_pipeline
-                        )
-                    print_transcripts(
-                        full_transcript,
-                        segment_transcript,
-                        partial_transcript
-                    )
-                    if verbose:
-                        print_data(
-                            getsizeof(master_buffer),
-                            getsizeof(segment_buffer)
-                        )
-                else:
-                    consecutive_silent_chunks += 1
-                    if consecutive_silent_chunks >= SEGMENT_SILENT_CHUNKS:
-                        # If cutoff on silence finish and return master
-                        if cutoff_on_silence:
-                            if len(master_buffer) > 0:
-                                all_audio_data = np.concatenate(
-                                    master_buffer,
-                                    axis=0
-                                ).squeeze()
-                                full_transcript = get_audio_text(
-                                    all_audio_data,
-                                    asr_pipeline
-                                )
-                            return full_transcript
+        try:
+            tty.setcbreak(fd)
+            while True:
+                if stdin in select([stdin], [], [], 0)[0]:
+                    ch = stdin.read(1)
+                    if ch == "r":
+                        if len(master_buffer) > 0:
+                            all_audio_data = np.concatenate(
+                                master_buffer,
+                                axis=0
+                            ).squeeze()
+                            full_transcript = get_audio_text(
+                                all_audio_data,
+                                asr_pipeline
+                            )
+                        return full_transcript
 
-                        # After long silence break out a segment
-                        # into full_transcript which we dont re-refine
+                block = audio_queue.get()
+                partial_buffer.append(block)
+                segment_buffer.append(block)
+                master_buffer.append(block)
+                frames_collected += block.shape[0]
+
+                # Process chunk once we get enough frames
+                if frames_collected >= CHUNK_FRAMES:
+                    frames_collected = 0
+                    chunk_data = np.concatenate(
+                      partial_buffer, axis=0).squeeze()
+                    partial_buffer = []
+
+                    if is_speech_chunk(chunk_data):
+                        chunk_count += 1
                         consecutive_silent_chunks = 0
-                        chunk_count = 0
-                        if (len(segment_transcript) > 1 or \
-                            len(partial_transcript) > 1):
-                            full_transcript += " " + segment_transcript
-                            full_transcript += " " + partial_transcript
-                        segment_buffer = []
-                        segment_transcript  = ""
-                        partial_transcript = ""
+                        # Refine segment transcript using segment audio
+                        if chunk_count > CHUNKS_PER_REFINEMENT:
+                            chunk_count = 0
+                            all_audio_data = np.concatenate(
+                              segment_buffer, axis=0).squeeze()
+                            partial_transcript = ""
+                            segment_transcript = get_audio_text(
+                                all_audio_data,
+                                asr_pipeline
+                            )
+                        # Transcribe last chunk into partial_transcript
+                        else:
+                            partial_transcript += get_audio_text(
+                                chunk_data,
+                                asr_pipeline
+                            )
                         print_transcripts(
                             full_transcript,
                             segment_transcript,
@@ -209,6 +196,57 @@ def record(verbose=False, cutoff_on_silence=False):
                                 getsizeof(master_buffer),
                                 getsizeof(segment_buffer)
                             )
+                    else:
+                        consecutive_silent_chunks += 1
+                        if consecutive_silent_chunks >= SEGMENT_SILENT_CHUNKS:
+                            # If cutoff on silence finish and return master
+                            if cutoff_on_silence:
+                                if len(master_buffer) > 0:
+                                    all_audio_data = np.concatenate(
+                                        master_buffer,
+                                        axis=0
+                                    ).squeeze()
+                                    full_transcript = get_audio_text(
+                                        all_audio_data,
+                                        asr_pipeline
+                                    )
+                                return full_transcript
+
+                            # After long silence break out a segment
+                            # into full_transcript which we dont re-refine
+                            consecutive_silent_chunks = 0
+                            chunk_count = 0
+                            if (len(segment_transcript) > 1 or \
+                                len(partial_transcript) > 1):
+                                full_transcript += " " + segment_transcript
+                                full_transcript += " " + partial_transcript
+                            segment_buffer = []
+                            segment_transcript  = ""
+                            partial_transcript = ""
+                            print_transcripts(
+                                full_transcript,
+                                segment_transcript,
+                                partial_transcript
+                            )
+                            if verbose:
+                                print_data(
+                                    getsizeof(master_buffer),
+                                    getsizeof(segment_buffer)
+                                )
+        except Exception as e:
+            print(e)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            if len(master_buffer) > 0:
+                all_audio_data = np.concatenate(
+                    master_buffer,
+                    axis=0
+                ).squeeze()
+                full_transcript = get_audio_text(
+                    all_audio_data,
+                    asr_pipeline
+                )
+            return full_transcript
 
 if __name__ == "__main__":
   parser = ArgumentParser()
